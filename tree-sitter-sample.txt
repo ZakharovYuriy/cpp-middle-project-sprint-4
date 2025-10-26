@@ -1,0 +1,1 @@
+tree-sitter parse --config-path /root/.config/tree-sitter/config.json files/sample.py
