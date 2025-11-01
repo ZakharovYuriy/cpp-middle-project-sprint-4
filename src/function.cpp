@@ -14,6 +14,7 @@
 #include <ranges>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -69,19 +70,29 @@ FunctionExtractor::FunctionNameLocation FunctionExtractor::GetNameLocation(const
 
     size_t coord_start = function_ast.find('[', id_pos);
     size_t coord_end = function_ast.find(']', coord_start);
-    std::string coords = function_ast.substr(coord_start + 1, coord_end - coord_start - 1);
+    std::string_view coords = function_ast;
+    coords.remove_prefix(coord_start + 1);
+    coords = coords.substr(0, coord_end - coord_start - 1);
 
     size_t comma = coords.find(',');
+    size_t column_pos = coords.find_first_not_of(" \t", comma + 1);
+    if (column_pos == std::string_view::npos)
+        column_pos = comma + 1;
     Position start{static_cast<size_t>(ToInt(coords.substr(0, comma))),
-                   static_cast<size_t>(ToInt(coords.substr(comma + 2)))};
+                   static_cast<size_t>(ToInt(coords.substr(column_pos)))};
 
     size_t dash = function_ast.find('[', coord_end);
     size_t end_bracket = function_ast.find(']', dash);
-    std::string end_coords = function_ast.substr(dash + 1, end_bracket - dash - 1);
+    std::string_view end_coords = function_ast;
+    end_coords.remove_prefix(dash + 1);
+    end_coords = end_coords.substr(0, end_bracket - dash - 1);
 
     comma = end_coords.find(',');
+    size_t end_column_pos = end_coords.find_first_not_of(" \t", comma + 1);
+    if (end_column_pos == std::string_view::npos)
+        end_column_pos = comma + 1;
     Position end{static_cast<size_t>(ToInt(end_coords.substr(0, comma))),
-                 static_cast<size_t>(ToInt(end_coords.substr(comma + 2)))};
+                 static_cast<size_t>(ToInt(end_coords.substr(end_column_pos)))};
 
     return {start, end, ""};
 }
@@ -108,20 +119,30 @@ FunctionExtractor::FindEnclosingClass(const std::string &ast, const FunctionName
     while ((class_pos = ast.find(class_marker, class_pos)) != std::string::npos) {
         size_t coord_start = ast.find('[', class_pos);
         size_t coord_end = ast.find(']', coord_start);
-        std::string coords = ast.substr(coord_start + 1, coord_end - coord_start - 1);
+        std::string_view coords = ast;
+        coords.remove_prefix(coord_start + 1);
+        coords = coords.substr(0, coord_end - coord_start - 1);
 
         size_t comma = coords.find(',');
+        size_t class_column_pos = coords.find_first_not_of(" \t", comma + 1);
+        if (class_column_pos == std::string_view::npos)
+            class_column_pos = comma + 1;
         Position class_start{static_cast<size_t>(ToInt(coords.substr(0, comma))),
-                             static_cast<size_t>(ToInt(coords.substr(comma + 1)))};
+                             static_cast<size_t>(ToInt(coords.substr(class_column_pos)))};
 
         size_t dash = ast.find('-', coord_end);
         size_t second_coord_start = ast.find('[', dash);
         size_t second_coord_end = ast.find(']', second_coord_start);
-        std::string end_coords = ast.substr(second_coord_start + 1, second_coord_end - second_coord_start - 1);
+        std::string_view end_coords = ast;
+        end_coords.remove_prefix(second_coord_start + 1);
+        end_coords = end_coords.substr(0, second_coord_end - second_coord_start - 1);
 
         comma = end_coords.find(',');
+        size_t class_end_column_pos = end_coords.find_first_not_of(" \t", comma + 1);
+        if (class_end_column_pos == std::string_view::npos)
+            class_end_column_pos = comma + 1;
         Position class_end{static_cast<size_t>(ToInt(end_coords.substr(0, comma))),
-                           static_cast<size_t>(ToInt(end_coords.substr(comma + 1)))};
+                           static_cast<size_t>(ToInt(end_coords.substr(class_end_column_pos)))};
 
         if (func_loc.start.line > class_start.line ||
             (func_loc.start.line == class_start.line && func_loc.start.col >= class_start.col)) {
