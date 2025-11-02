@@ -21,6 +21,8 @@
 #include <variant>
 #include <vector>
 
+#include "metric_impl/python_ast.hpp"
+
 using namespace std;
 
 namespace analyzer::metric::metric_impl {
@@ -46,15 +48,8 @@ static bool HasNonWhitespace(string_view line) {
     return false;
 }
 
-struct Pos {
-    int line, col;
-};
-struct Node {
-    string type;
-    Pos start;
-    Pos end;
-    vector<Node> children;
-};
+namespace pa = ::analyzer::metric::python_ast;
+using Node = pa::Node;
 
 // отрезок в рамках одной строки: [c0, c1)
 struct Seg {
@@ -201,197 +196,43 @@ MetricResult::ValueType CodeLinesCountMetric::CalculateImpl(const function::Func
     if (f.ast.empty())
         return result;
 
-    struct Parser {
-        const string &src;
-        size_t pos = 0;
+    pa::Node root = pa::Parse(f.ast);
+    if (root.type.empty())
+        return result;
 
-        static bool IsSpace(char c) {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    const pa::Node *target = pa::FindChild(root, "block");
+    if (target == nullptr)
+        target = &root;
+
+    auto cov = covered_segs(*target);
+
+    unordered_set<int> docstring_lines;
+    unordered_set<int> comment_lines;
+    unordered_set<int> structural_only_lines;
+    collect_special_lines(*target, nullptr, docstring_lines, comment_lines, structural_only_lines);
+
+    bool file_ok = false;
+    auto file_lines = ReadFileLines(f.filename, file_ok);
+    if (file_ok && !file_lines.empty()) {
+        const int start_line = max(0, target->start.line);
+        const int end_line = min(static_cast<int>(file_lines.size()) - 1, target->end.line);
+        for (int line = start_line; line <= end_line; ++line) {
+            if (docstring_lines.count(line))
+                continue;
+            if (comment_lines.count(line))
+                continue;
+            string_view sv(file_lines[line]);
+            if (!HasNonWhitespace(sv))
+                continue;
+            if (structural_only_lines.count(line))
+                continue;
+            auto it = cov.find(line);
+            if (it == cov.end() || it->second.empty())
+                add_seg(cov, line, {0, 1});
         }
-
-        void SkipSpaces() {
-            while (pos < src.size() && IsSpace(src[pos]))
-                ++pos;
-        }
-
-        int ParseInt() {
-            int sign = 1;
-            if (pos < src.size() && src[pos] == '-') {
-                sign = -1;
-                ++pos;
-            }
-            int value = 0;
-            while (pos < src.size() && src[pos] >= '0' && src[pos] <= '9') {
-                value = value * 10 + (src[pos] - '0');
-                ++pos;
-            }
-            return sign * value;
-        }
-
-        Pos ParsePos() {
-            Pos p{0, 0};
-            if (pos >= src.size() || src[pos] != '[')
-                return p;
-
-            ++pos;
-            SkipSpaces();
-            p.line = ParseInt();
-            SkipSpaces();
-            if (pos < src.size() && src[pos] == ',') {
-                ++pos;
-            }
-            SkipSpaces();
-            p.col = ParseInt();
-            SkipSpaces();
-            if (pos < src.size() && src[pos] == ']')
-                ++pos;
-            return p;
-        }
-
-        void SkipStringLiteral() {
-            if (pos >= src.size() || src[pos] != '"')
-                return;
-            ++pos;
-            while (pos < src.size()) {
-                char c = src[pos];
-                if (c == '\\') {
-                    pos += (pos + 1 < src.size()) ? 2 : 1;
-                } else if (c == '"') {
-                    ++pos;
-                    break;
-                } else {
-                    ++pos;
-                }
-            }
-        }
-
-        void SkipIdentifier() {
-            while (pos < src.size()) {
-                char c = src[pos];
-                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-                    c == '_' || c == '.') {
-                    ++pos;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Node ParseNode() {
-            SkipSpaces();
-            if (pos >= src.size() || src[pos] != '(')
-                return {};
-
-            ++pos;
-            size_t type_begin = pos;
-            while (pos < src.size()) {
-                char c = src[pos];
-                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-                    c == '_' || c == '.') {
-                    ++pos;
-                } else {
-                    break;
-                }
-            }
-            Node node;
-            node.type = src.substr(type_begin, pos - type_begin);
-
-            SkipSpaces();
-            if (pos < src.size() && src[pos] == '[') {
-                node.start = ParsePos();
-                SkipSpaces();
-                if (pos < src.size() && src[pos] == '-') {
-                    ++pos;
-                }
-                SkipSpaces();
-                node.end = ParsePos();
-            } else {
-                node.start = {0, 0};
-                node.end = {0, 0};
-            }
-
-            while (pos < src.size()) {
-                SkipSpaces();
-                if (pos >= src.size())
-                    break;
-                char c = src[pos];
-                if (c == ')') {
-                    ++pos;
-                    break;
-                }
-                if (c == '(') {
-                    node.children.push_back(ParseNode());
-                    continue;
-                }
-                if (c == '"') {
-                    SkipStringLiteral();
-                    continue;
-                }
-                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
-                    SkipIdentifier();
-                    SkipSpaces();
-                    if (pos < src.size() && src[pos] == ':') {
-                        ++pos;
-                    }
-                    continue;
-                }
-                if (c == '[') {
-                    ParsePos();
-                    continue;
-                }
-                ++pos;
-            }
-            return node;
-        }
-
-        Node Parse() {
-            SkipSpaces();
-            if (pos >= src.size())
-                return {};
-            return ParseNode();
-        }
-    };
-
-    Parser parser{f.ast};
-    Node root = parser.Parse();
-    if (!root.type.empty()) {
-        const Node *target = &root;
-        for (const auto &child : root.children) {
-            if (child.type == "block") {
-                target = &child;
-                break;
-            }
-        }
-        auto cov = covered_segs(*target);
-
-        unordered_set<int> docstring_lines;
-        unordered_set<int> comment_lines;
-        unordered_set<int> structural_only_lines;
-        collect_special_lines(*target, nullptr, docstring_lines, comment_lines, structural_only_lines);
-
-        bool file_ok = false;
-        auto file_lines = ReadFileLines(f.filename, file_ok);
-        if (file_ok && !file_lines.empty()) {
-            const int start_line = max(0, target->start.line);
-            const int end_line = min(static_cast<int>(file_lines.size()) - 1, target->end.line);
-            for (int line = start_line; line <= end_line; ++line) {
-                if (docstring_lines.count(line))
-                    continue;
-                if (comment_lines.count(line))
-                    continue;
-                string_view sv(file_lines[line]);
-                if (!HasNonWhitespace(sv))
-                    continue;
-                if (structural_only_lines.count(line))
-                    continue;
-                auto it = cov.find(line);
-                if (it == cov.end() || it->second.empty())
-                    add_seg(cov, line, {0, 1});
-            }
-        }
-
-        result = count_cover_lines(cov);
     }
+
+    result = count_cover_lines(cov);
 
     return result;
 }
