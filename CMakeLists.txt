@@ -12,6 +12,9 @@ find_package(Boost REQUIRED COMPONENTS program_options)
 
 include_directories(PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+include(CTest)
+enable_testing()
+
 # Сначала настраиваем библиотеки, которые будут подключаться к analyzer
 add_subdirectory(src)
 
@@ -32,6 +35,3 @@ target_include_directories(${target}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-
-include(CTest)
-enable_testing()

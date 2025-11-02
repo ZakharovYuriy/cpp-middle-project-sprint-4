@@ -15,6 +15,7 @@
 #include <ranges>
 #include <sstream>
 #include <string>
+#include <stdexcept>
 #include <variant>
 #include <vector>
 
@@ -23,12 +24,17 @@
 namespace analyzer::metric {
 
 void MetricExtractor::RegisterMetric(std::unique_ptr<IMetric> metric) {
-    // здесь ваш код
+    if (!metric)
+        throw std::invalid_argument("Metric pointer is null");
+    metrics.push_back(std::move(metric));
 }
 
 MetricResults MetricExtractor::Get(const function::Function &func) const {
-    // здесь ваш код
-    return {};
+    MetricResults results;
+    results.reserve(metrics.size());
+    for (const auto &metric : metrics)
+        results.push_back(metric->Calculate(func));
+    return results;
 }
 
 }  // namespace analyzer::metric

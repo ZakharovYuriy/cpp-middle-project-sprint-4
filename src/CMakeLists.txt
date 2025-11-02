@@ -51,3 +51,25 @@ target_include_directories(cmd_options
 # Настраиваем библиотеки metric_accumulator_impl и metric_impl
 add_subdirectory(metric_accumulator_impl)
 add_subdirectory(metric_impl)
+
+add_executable(analysis_test
+    tests/analyse.cpp
+)
+
+target_link_libraries(analysis_test
+    PRIVATE
+        GTest::GTest
+        GTest::Main
+        metric
+        metric_accumulator
+        function
+        file
+)
+
+file(GLOB analysis_test_files "${CMAKE_CURRENT_SOURCE_DIR}/tests/files/*.py")
+foreach(file IN LISTS analysis_test_files)
+    get_filename_component(file_name ${file} NAME)
+    configure_file(${file} "${CMAKE_CURRENT_BINARY_DIR}/${file_name}" COPYONLY)
+endforeach()
+
+add_test(NAME analysis_test COMMAND analysis_test)
