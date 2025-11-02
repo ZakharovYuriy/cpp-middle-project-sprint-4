@@ -12,19 +12,26 @@ namespace analyzer::cmd {
 namespace po = boost::program_options;
 
 ProgramOptions::ProgramOptions() : desc_("Allowed options") {
-    desc_.add_options()("help,h", "Display help message")(
-        "file,f", po::value<std::vector<std::string>>(&files_)->required()->multitoken(),
-        "List of files to process (required)");
+    desc_.add_options()
+        ("help,h", "Display help message")
+        ("file,f", po::value<std::vector<std::string>>(&files_)->required()->multitoken(),
+         "List of files to process (required)")
+        ("ANALYZER_DEBUG", po::bool_switch(&debug_enabled_)->default_value(false),
+         "Enable debug output");
 }
 
 ProgramOptions::~ProgramOptions() = default;
 
 bool ProgramOptions::Parse(int argc, char *argv[]) {
+    help_requested_ = false;
+    debug_enabled_ = false;
+
     try {
         po::variables_map vm;
         po::store(po::command_line_parser(argc, argv).options(desc_).run(), vm);
 
         if (vm.count("help")) {
+            help_requested_ = true;
             desc_.print(std::cout);
             return false;
         }

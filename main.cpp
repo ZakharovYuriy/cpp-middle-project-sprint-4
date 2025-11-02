@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -10,10 +11,12 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <print>
 #include <ranges>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -44,33 +47,95 @@ void RunDebugSnippet() {
     }
 }
 
+void PrintFunctionMetrics(const analyzer::FunctionAnalysisEntry &entry, const std::string &indent,
+                          bool include_filename) {
+    const auto &func = entry.first;
+    std::cout << indent;
+    if (include_filename)
+        std::cout << func.filename << " :: ";
+    if (func.class_name)
+        std::cout << *func.class_name << '.';
+    std::cout << func.name << '\n';
+
+    for (const auto &metric : entry.second)
+        std::cout << indent << "  " << metric.metric_name << ": " << metric.value << '\n';
+}
+
+void PrintAnalysisSummary(const analyzer::FunctionAnalysis &analysis) {
+    if (analysis.empty()) {
+        std::cout << "Функции не найдены.\n";
+        return;
+    }
+
+    std::cout << "Метрики по функциям:\n";
+    for (const auto &entry : analysis)
+        PrintFunctionMetrics(entry, "  ", true);
+}
+
+void PrintGroupedAnalysis(std::string_view title, const analyzer::GroupedFunctionAnalysis &grouped,
+                          const std::function<std::string(const analyzer::function::Function &)> &header_formatter) {
+    if (grouped.empty())
+        return;
+
+    std::cout << '\n' << title << ":\n";
+    for (const auto &group : grouped) {
+        if (group.empty())
+            continue;
+
+        std::cout << "  " << header_formatter(group.front().first) << '\n';
+        for (const auto &entry : group)
+            PrintFunctionMetrics(entry, "    ", false);
+    }
+}
+
+bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs) {
+    if (lhs.size() != rhs.size())
+        return false;
+    for (size_t i = 0; i < lhs.size(); ++i)
+        if (std::tolower(static_cast<unsigned char>(lhs[i])) != std::tolower(static_cast<unsigned char>(rhs[i])))
+            return false;
+    return true;
+}
 }  // namespace
 
 int main(int argc, char *argv[]) {
     analyzer::cmd::ProgramOptions options;
-    // распарсите входные параметры
 
-    RunDebugSnippet();
+    if (!options.Parse(argc, argv))
+        return options.IsHelpRequested() ? EXIT_SUCCESS : EXIT_FAILURE;
 
-    // analyzer::metric::MetricExtractor metric_extractor;
-    // зарегистрируйте метрики в metric_extractor
+    if (options.DebugEnabled())
+        RunDebugSnippet();
 
-    // запустите analyzer::AnalyseFunctions
-    // выведете результаты анализа на консоль
+    analyzer::metric::MetricExtractor metric_extractor;
+    metric_extractor.RegisterMetric(std::make_unique<analyzer::metric::metric_impl::CodeLinesCountMetric>());
+    metric_extractor.RegisterMetric(std::make_unique<analyzer::metric::metric_impl::CyclomaticComplexityMetric>());
+    metric_extractor.RegisterMetric(std::make_unique<analyzer::metric::metric_impl::CountParametersMetric>());
 
-    // analyzer::metric_accumulator::MetricsAccumulator accumulator;
-    // зарегистрируйте аккумуляторы метрик в accumulator
+    try {
+        const auto &files = options.GetFiles();
+        auto analysis = analyzer::AnalyseFunctions(files, metric_extractor);
 
-    // запустите analyzer::SplitByFiles
-    // запустите analyzer::AccumulateFunctionAnalysis для каждого подмножества результатов метрик
-    // выведете результаты на консоль
+        PrintAnalysisSummary(analysis);
 
-    // запустите analyzer::SplitByClasses
-    // запустите analyzer::AccumulateFunctionAnalysis для каждого подмножества результатов метрик
-    // выведете результаты на консоль
+        auto grouped_by_file = analyzer::SplitByFiles(analysis);
+        PrintGroupedAnalysis("Метрики по файлам", grouped_by_file,
+                             [](const analyzer::function::Function &func) { return "Файл: " + func.filename; });
 
-    // запустите analyzer::AccumulateFunctionAnalysis для всех результатов метрик
-    // выведете результаты на консоль
+        auto grouped_by_class = analyzer::SplitByClasses(analysis);
+        PrintGroupedAnalysis("Метрики по классам", grouped_by_class, [](const analyzer::function::Function &func) {
+            std::string header = "Класс: ";
+            if (func.class_name)
+                header += *func.class_name;
+            else
+                header += "<без имени>";
+            header += " (файл " + func.filename + ')';
+            return header;
+        });
 
-    return 0;
+        return EXIT_SUCCESS;
+    } catch (const std::exception &e) {
+        std::cerr << "Ошибка: " << e.what() << '\n';
+        return EXIT_FAILURE;
+    }
 }
