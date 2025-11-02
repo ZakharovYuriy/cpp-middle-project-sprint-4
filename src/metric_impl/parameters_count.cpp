@@ -16,6 +16,11 @@
 
 namespace analyzer::metric::metric_impl {
 
-// здесь ваш код
+MetricResult::ValueType CountParametersMetric::CalculateImpl(const function::Function &/*f*/) const {
+    // TODO: implement
+    return 0;
+}
+
+std::string CountParametersMetric::Name() const { return "parameters_count"; }
 
 }  // namespace analyzer::metric::metric_impl

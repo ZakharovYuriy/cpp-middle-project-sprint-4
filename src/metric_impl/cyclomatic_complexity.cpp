@@ -18,6 +18,11 @@
 
 namespace analyzer::metric::metric_impl {
 
-// здесь ваш код
+MetricResult::ValueType CyclomaticComplexityMetric::CalculateImpl(const function::Function &/*f*/) const {
+    // TODO: implement
+    return 0;
+}
+
+std::string CyclomaticComplexityMetric::Name() const { return "cyclomatic_complexity"; }
 
 }  // namespace analyzer::metric::metric_impl

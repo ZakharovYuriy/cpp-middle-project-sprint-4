@@ -26,9 +26,31 @@
 #include "metric_accumulator_impl/accumulators.hpp"
 #include "metric_impl/metrics.hpp"
 
+namespace {
+
+void RunDebugSnippet() {
+    try {
+        analyzer::file::File file("files/sample.py");
+        std::cout << file.ast;
+
+        analyzer::function::FunctionExtractor extractor;
+        const auto functions = extractor.Get(file);
+        for (const auto &func : functions) {
+            std::cout << "\n--- Function: " << func.name << " ---\n" << func.ast;
+        }
+        std::cout << '\n';
+    } catch (const std::exception &e) {
+        std::cerr << "Debug snippet failed: " << e.what() << '\n';
+    }
+}
+
+}  // namespace
+
 int main(int argc, char *argv[]) {
     analyzer::cmd::ProgramOptions options;
     // распарсите входные параметры
+
+    RunDebugSnippet();
 
     // analyzer::metric::MetricExtractor metric_extractor;
     // зарегистрируйте метрики в metric_extractor

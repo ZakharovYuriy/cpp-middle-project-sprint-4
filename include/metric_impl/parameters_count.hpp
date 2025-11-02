@@ -17,7 +17,9 @@
 namespace analyzer::metric::metric_impl {
 
 struct CountParametersMetric final : public IMetric {
-    // здесь ваш код
+protected:
+    MetricResult::ValueType CalculateImpl(const function::Function &f) const override;
+    std::string Name() const override;
 };
 
 }  // namespace analyzer::metric::metric_impl
