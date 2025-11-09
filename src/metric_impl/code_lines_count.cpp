@@ -99,7 +99,7 @@ MetricResult::ValueType CodeLinesCountMetric::CalculateImpl(const function::Func
 
     // filter empty lines and comment lines
     string buffer = readFile(f.filename);
-    auto numberOfEmptyLines =
+    auto numberOfLines =
         ranges::distance(views::split(buffer, delim) | views::enumerate | views::filter([&functionSize](auto &&p) {
                              auto [index, line] = p;
                              return index >= functionSize.first && index <= functionSize.second;
@@ -111,7 +111,7 @@ MetricResult::ValueType CodeLinesCountMetric::CalculateImpl(const function::Func
                              return !isEmptyLine && !isComment;
                          }));
 
-    return numberOfEmptyLines;
+    return numberOfLines;
 }
 
 std::string CodeLinesCountMetric::Name() const { return "code_lines_count"; }
