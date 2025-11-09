@@ -12,6 +12,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <ranges>
 #include <sstream>
 #include <string>
@@ -27,214 +28,90 @@ using namespace std;
 
 namespace analyzer::metric::metric_impl {
 
-static vector<string> ReadFileLines(const string &path, bool &ok) {
-    ifstream input(path);
-    vector<string> lines;
-    if (!input.is_open()) {
-        ok = false;
-        return lines;
-    }
-    ok = true;
-    string line;
-    while (getline(input, line))
-        lines.push_back(line);
-    return lines;
+std::string readFile(const std::string &filePath) {
+    std::ifstream file(filePath, std::ios::in | std::ios::binary);
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open file: " + filePath);
+
+    std::string data((std::istreambuf_iterator<char>(file)), {});
+    if (file.bad())
+        throw std::runtime_error("I/O error while reading file: " + filePath);
+
+    if (data.empty())
+        throw std::runtime_error("File is empty: " + filePath);
+
+    return data;
 }
 
-static bool HasNonWhitespace(string_view line) {
-    for (char ch : line)
-        if (!isspace(static_cast<unsigned char>(ch)))
-            return true;
-    return false;
+std::pair<int, int> extractLinesRange(std::string_view str) {
+    auto next_num = [&](size_t pos) -> int {
+        pos = str.find_first_of("-0123456789", pos);
+        if (pos == std::string_view::npos)
+            throw std::runtime_error("number expected");
+
+        int value{};
+        auto [ptr, ec] = std::from_chars(str.data() + pos, str.data() + str.size(), value);
+        if (ec != std::errc{})
+            throw std::runtime_error("invalid number");
+        return value;
+    };
+
+    size_t p = str.find('[');
+    if (p == std::string_view::npos)
+        throw std::runtime_error("first [ missing");
+    int a = next_num(++p);
+
+    p = str.find('[', p);
+    if (p == std::string_view::npos)
+        throw std::runtime_error("second [ missing");
+    int b = next_num(++p);
+
+    return {a, b};
 }
 
-namespace pa = ::analyzer::metric::python_ast;
-using Node = pa::Node;
-
-// отрезок в рамках одной строки: [c0, c1)
-struct Seg {
-    int c0, c1;
-};
-using LineSegs = unordered_map<int, vector<Seg>>;  // line -> непересекающиеся сегменты
-
-// добавление сегмента с нормализацией (склейка пересечений)
-static void add_seg(LineSegs &m, int line, Seg s) {
-    if (s.c1 <= s.c0)
-        return;
-    auto &v = m[line];
-    v.push_back(s);
-    // склеим
-    sort(v.begin(), v.end(), [](auto &a, auto &b) { return a.c0 < b.c0; });
-    vector<Seg> merged;
-    for (auto &x : v) {
-        if (merged.empty() || x.c0 > merged.back().c1)
-            merged.push_back(x);
-        else
-            merged.back().c1 = max(merged.back().c1, x.c1);
-    }
-    v.swap(merged);
+static bool checkIsLineComment(const std::vector<std::pair<int, int>> &commentLines, int lineNumber) {
+    auto it = std::upper_bound(commentLines.begin(), commentLines.end(), lineNumber,
+                               [](int value, const auto &rg) { return value < rg.first; });
+    if (it == commentLines.begin())
+        return false;
+    --it;
+    return (lineNumber >= it->first) && (lineNumber <= it->second);
 }
-
-// вычесть из большого сегмента lineSeg набор child-сегментов на той же строке
-static vector<Seg> subtract_line_seg(Seg big, const vector<Seg> &children) {
-    vector<Seg> out;
-    int cur = big.c0;
-    for (auto &c : children) {
-        if (c.c0 > cur)
-            out.push_back({cur, min(c.c0, big.c1)});
-        cur = max(cur, c.c1);
-        if (cur >= big.c1)
-            break;
-    }
-    if (cur < big.c1)
-        out.push_back({cur, big.c1});
-    // удалить пустые
-    out.erase(remove_if(out.begin(), out.end(), [](auto s) { return s.c1 <= s.c0; }), out.end());
-    return out;
-}
-
-// диапазон узла разбитый на построчные сегменты (без детей)
-static vector<pair<int, Seg>> node_span_per_lines(const Node &n) {
-    if (n.start.line != n.end.line)
-        return {};
-    return {{n.start.line, {n.start.col, n.end.col}}};
-}
-
-// объединение покрытий (склеивает сегменты)
-static void merge_cover(LineSegs &dst, const LineSegs &src) {
-    for (auto &[ln, v] : src)
-        for (auto s : v)
-            add_seg(dst, ln, s);
-}
-
-static void collect_special_lines(const Node &n, const string *parent_type,
-                                  unordered_set<int> &docstring_lines,
-                                  unordered_set<int> &comment_lines,
-                                  unordered_set<int> &structural_only_lines) {
-    if (n.type == "comment") {
-        for (int ln = n.start.line; ln <= n.end.line; ++ln)
-            comment_lines.insert(ln);
-    }
-
-    const bool is_docstring_expr = n.type == "expression_statement" && !n.children.empty() &&
-                                   all_of(n.children.begin(), n.children.end(), [](const Node &child) {
-                                       return child.type == "string" || child.type == "comment";
-                                   });
-    const bool is_block_docstring = n.type == "string" && parent_type && *parent_type == "block";
-    if (is_docstring_expr || is_block_docstring) {
-        for (int ln = n.start.line; ln <= n.end.line; ++ln)
-            docstring_lines.insert(ln);
-    }
-
-    if (n.type == "parenthesized_expression" && n.start.line != n.end.line)
-        structural_only_lines.insert(n.end.line);
-
-    for (const auto &child : n.children)
-        collect_special_lines(child, &n.type, docstring_lines, comment_lines, structural_only_lines);
-}
-
-// посчитать «покрытие» узла: возвращает сегменты «значимого» кода (по детям + собственный остаток)
-static LineSegs covered_segs(const Node &n, const string *parent_type = nullptr) {
-    LineSegs cov_children;
-    for (auto &ch : n.children) {
-        auto sub = covered_segs(ch, &n.type);
-        merge_cover(cov_children, sub);
-    }
-    if (n.type == "comment")
-        return cov_children;  // комментарии не дают вклада
-
-    if (n.type == "string" && parent_type && *parent_type == "block")
-        return {};
-
-    const bool is_docstring = n.type == "expression_statement" && !n.children.empty() &&
-                              all_of(n.children.begin(), n.children.end(), [](const Node &child) {
-                                  return child.type == "string" || child.type == "comment";
-                              });
-    if (is_docstring)
-        return {};
-
-    // разобьём диапазон узла по строкам и вычтем покрытие детей на каждой строке
-    LineSegs own;  // собственные остатки
-    auto span_lines = node_span_per_lines(n);
-    for (auto &[ln, seg] : span_lines) {
-        auto it = cov_children.find(ln);
-        const vector<Seg> *kids = (it == cov_children.end()) ? nullptr : &it->second;
-        vector<Seg> residual = kids ? subtract_line_seg(seg, *kids) : vector<Seg>{seg};
-        for (auto r : residual)
-            add_seg(own, ln, r);
-    }
-
-    // Решение «универсально, без белых списков»: узел даёт вклад только если у него есть ненулевой остаток
-    // (т.е. есть текст, не объясняемый детьми). Это защищает от рамок (их «текст» — скобки/двоеточия),
-    // которые обычно покрывают только края и будут вычитаться детьми.
-    bool has_own = false;
-    for (auto &[ln, v] : own)
-        if (!v.empty()) {
-            has_own = true;
-            break;
-        }
-
-    LineSegs cov = cov_children;
-    if (has_own)
-        merge_cover(cov, own);
-    return cov;
-}
-
-// итог: количество строк, где есть «значимый» код
-static int count_cover_lines(const LineSegs &cov) {
-    int cnt = 0;
-    for (auto &[ln, v] : cov)
-        if (!v.empty())
-            ++cnt;
-    return cnt;
-}
-
 
 MetricResult::ValueType CodeLinesCountMetric::CalculateImpl(const function::Function &f) const {
-    MetricResult::ValueType result = 0;
+    constexpr auto delim{"\n"sv};
+    constexpr auto commentStr{"comment"sv};
 
-    if (f.ast.empty())
-        return result;
+    // First line should contain node with function name and size
+    auto functionSizeView = views::split(f.ast, delim) | views::transform([](auto &&comentLine) {
+                                return extractLinesRange(string_view(comentLine));
+                            });
+    if (functionSizeView.begin() == functionSizeView.end())
+        throw runtime_error("functionSizeView is empty");
+    auto functionSize = *functionSizeView.begin();
 
-    pa::Node root = pa::Parse(f.ast);
-    if (root.type.empty())
-        return result;
+    // create vector of [comment.begin, comment.end] numbers
+    auto commentLines =
+        views::split(f.ast, delim) |
+        views::filter([&commentStr](auto &&line) { return ranges::contains_subrange(line, commentStr); }) |
+        views::transform([](auto &&comentLine) { return extractLinesRange(string_view(comentLine)); }) |
+        ranges::to<vector>();
 
-    const pa::Node *target = pa::FindChild(root, "block");
-    if (target == nullptr)
-        target = &root;
+    // filter empty lines and comment lines
+    string buffer = readFile(f.filename);
+    auto numberOfEmptyLines =
+        ranges::distance(views::split(buffer, delim) | views::enumerate | views::filter([&functionSize](auto &&p) {
+                             auto [index, line] = p;
+                             return index >= functionSize.first && index <= functionSize.second;
+                         }) |
+                         views::filter([&commentLines](auto &&pair) {
+                             const auto &[index, line] = pair;
+                             bool isEmptyLine = ranges::all_of(line, [](unsigned char ch) { return isspace(ch); });
+                             bool isComment = checkIsLineComment(commentLines, index);
+                             return !isEmptyLine && !isComment;
+                         }));
 
-    auto cov = covered_segs(*target);
-
-    unordered_set<int> docstring_lines;
-    unordered_set<int> comment_lines;
-    unordered_set<int> structural_only_lines;
-    collect_special_lines(*target, nullptr, docstring_lines, comment_lines, structural_only_lines);
-
-    bool file_ok = false;
-    auto file_lines = ReadFileLines(f.filename, file_ok);
-    if (file_ok && !file_lines.empty()) {
-        const int start_line = max(0, target->start.line);
-        const int end_line = min(static_cast<int>(file_lines.size()) - 1, target->end.line);
-        for (int line = start_line; line <= end_line; ++line) {
-            if (docstring_lines.count(line))
-                continue;
-            if (comment_lines.count(line))
-                continue;
-            string_view sv(file_lines[line]);
-            if (!HasNonWhitespace(sv))
-                continue;
-            if (structural_only_lines.count(line))
-                continue;
-            auto it = cov.find(line);
-            if (it == cov.end() || it->second.empty())
-                add_seg(cov, line, {0, 1});
-        }
-    }
-
-    result = count_cover_lines(cov);
-
-    return result;
+    return numberOfEmptyLines;
 }
 
 std::string CodeLinesCountMetric::Name() const { return "code_lines_count"; }

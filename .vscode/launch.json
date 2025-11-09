@@ -11,7 +11,8 @@
             "program": "${workspaceFolder}/build/analyzer",
             "args": [
                 "-f",
-                "files/sample.py"
+                "files/sample.py",
+                "--ANALYZER_DEBUG"
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "GCC: Build Debug",

@@ -6,13 +6,13 @@ class DemoProcessor:
         self.offset = offset
 
     def process(self, data):
-        """Inline docstring to be ignored by metrics"""
+        """Inline docstring should also count as code"""
         transformed = [x * self.multiplier for x in data]
         return [x + self.offset for x in transformed]
 
 
 def helper_function():
-    """Top level helper with docstring that should be ignored."""
+    """Top level helper with docstring that counts toward metrics."""
     result = []
     # regular comment
     for value in range(3):

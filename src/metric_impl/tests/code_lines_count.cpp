@@ -21,19 +21,16 @@ std::filesystem::path SparseSampleFilePath() {
     return std::filesystem::path(__FILE__).parent_path() / "files" / "code_lines_count_sparse.py";
 }
 
-function::Function GetFunction(std::string_view function_name,
-                               std::filesystem::path sample_path = TestFilePath()) {
+function::Function GetFunction(std::string_view function_name, std::filesystem::path sample_path = TestFilePath()) {
     analyzer::file::File file(sample_path.string());
     function::FunctionExtractor extractor;
     auto functions = extractor.Get(file);
 
-    auto it = std::find_if(functions.begin(), functions.end(), [&](const function::Function &func) {
-        return func.name == function_name;
-    });
+    auto it = std::find_if(functions.begin(), functions.end(),
+                           [&](const function::Function &func) { return func.name == function_name; });
 
     if (it == functions.end()) {
-        throw std::runtime_error("Function " + std::string(function_name) +
-                                 " not found in " + sample_path.string());
+        throw std::runtime_error("Function " + std::string(function_name) + " not found in " + sample_path.string());
     }
 
     return *it;
@@ -47,16 +44,16 @@ TEST(CodeLinesCountMetric, CountsClassMethodWithoutDocstring) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 2);
+    EXPECT_EQ(result.value, 3);
 }
 
-TEST(CodeLinesCountMetric, SkipsDocstringAndComments) {
+TEST(CodeLinesCountMetric, CountsDocstringsButSkipsComments) {
     const auto function = GetFunction("helper_function");
     CodeLinesCountMetric metric;
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 4);
+    EXPECT_EQ(result.value, 6);
 }
 
 TEST(CodeLinesCountMetric, IgnoresBlankLinesInSparseFunction) {
@@ -65,7 +62,7 @@ TEST(CodeLinesCountMetric, IgnoresBlankLinesInSparseFunction) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 13);
+    EXPECT_EQ(result.value, 18);
 }
 
 }  // namespace analyzer::metric::metric_impl
