@@ -22,8 +22,6 @@
 #include <variant>
 #include <vector>
 
-#include "metric_impl/python_ast.hpp"
-
 using namespace std;
 
 namespace analyzer::metric::metric_impl {
