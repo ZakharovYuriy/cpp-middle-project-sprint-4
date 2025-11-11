@@ -19,6 +19,11 @@
 
 namespace analyzer::metric::metric_impl {
 
-// здесь ваш код
+MetricResult::ValueType NamingStyleMetric::CalculateImpl(const function::Function &/*f*/) const {
+    // TODO: implement
+    return 0;
+}
+
+std::string NamingStyleMetric::Name() const { return "naming_style"; }
 
 }  // namespace analyzer::metric::metric_impl
