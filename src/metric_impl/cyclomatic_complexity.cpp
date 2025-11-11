@@ -21,9 +21,19 @@
 using namespace std;
 
 namespace analyzer::metric::metric_impl {
-static const std::unordered_set<std::string_view> kCyclomaticNodes = {
-    "if_statement",        "elif_clause", "while_statement",  "for_statement",         "except_clause",
-    "except_group_clause", "case_clause", "assert_statement", "conditional_expression"};
+static const std::unordered_set<std::string_view> kCyclomaticNodes = {"if_statement",
+                                                                      "else_clause",
+                                                                      "elif_clause",
+                                                                      "while_statement",
+                                                                      "for_statement",
+                                                                      "try_statement",
+                                                                      "except_clause",
+                                                                      "except_group_clause",
+                                                                      "finally_clause",
+                                                                      "match_statement",
+                                                                      "case_clause",
+                                                                      "assert_statement",
+                                                                      "conditional_expression"};
 
 MetricResult::ValueType CyclomaticComplexityMetric::CalculateImpl(const function::Function &f) const {
     constexpr auto delim{"\n"sv};

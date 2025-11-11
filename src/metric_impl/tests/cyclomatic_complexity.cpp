@@ -50,7 +50,7 @@ TEST(CyclomaticComplexityMetric, HandlesRichControlFlow) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(std::get<int>(result.value), 11);
+    EXPECT_EQ(std::get<int>(result.value), 15);
 }
 
 TEST_P(CyclomaticComplexityMetricSamples, MatchesExpectedComplexityAcrossSamples) {
@@ -69,21 +69,21 @@ const std::vector<CyclomaticSampleCase> &CyclomaticTestCases() {
         {"code_lines_count_sample.py", "__init__", 0},
         {"code_lines_count_sample.py", "process", 0},
         {"code_lines_count_sample.py", "helper_function", 1},
-        {"code_lines_count_sparse.py", "example_function", 1},
+        {"code_lines_count_sparse.py", "example_function", 2},
         {"code_lines_count_sparse.py", "__init__", 0},
         {"code_lines_count_sparse.py", "do_something", 0},
         {"code_lines_count_sparse.py", "another_func", 0},
         {"code_lines_count_sparse.py", "decorated_function", 0},
         {"comments.py", "Func_comments", 0},
-        {"exceptions.py", "Try_Exceptions", 2},
+        {"exceptions.py", "Try_Exceptions", 4},
         {"if.py", "testIf", 1},
         {"loops.py", "TestLoops", 3},
         {"many_lines.py", "testmultiline", 1},
         {"many_parameters.py", "__test_multiparameters__", 1},
-        {"match_case.py", "test_Match_case", 3},
-        {"metrics_sample.py", "complexity_target", 11},
+        {"match_case.py", "test_Match_case", 4},
+        {"metrics_sample.py", "complexity_target", 15},
         {"metrics_sample.py", "params_target", 0},
-        {"nested_if.py", "Testnestedif", 4},
+        {"nested_if.py", "Testnestedif", 5},
         {"simple.py", "test_simple", 1},
         {"ternary.py", "teSt_ternary", 2},
     };
