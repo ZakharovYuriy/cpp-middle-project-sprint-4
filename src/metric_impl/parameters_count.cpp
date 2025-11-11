@@ -108,11 +108,11 @@ MetricResult::ValueType CountParametersMetric::CalculateImpl(const function::Fun
                                  return group.empty() ? string_view{} : string_view(group.front());
                              });
 
-    return ranges::distance(mainNodesOfParams | views::filter([](auto &&line) {
-                                return ranges::any_of(parameterNodeTypes, [&line](auto &&node) {
-                                    return ranges::contains_subrange(line, node);
-                                });
-                            }));
+    return static_cast<int>(ranges::distance(mainNodesOfParams | views::filter([](auto &&line) {
+                                                   return ranges::any_of(parameterNodeTypes, [&line](auto &&node) {
+                                                       return ranges::contains_subrange(line, node);
+                                                   });
+                                               })));
 }
 
 std::string CountParametersMetric::Name() const { return "parameters_count"; }

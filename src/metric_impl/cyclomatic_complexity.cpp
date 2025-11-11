@@ -27,11 +27,11 @@ static const std::unordered_set<std::string_view> kCyclomaticNodes = {
 
 MetricResult::ValueType CyclomaticComplexityMetric::CalculateImpl(const function::Function &f) const {
     constexpr auto delim{"\n"sv};
-    return ranges::distance(views::split(f.ast, delim) | views::filter([](auto &&line) {
-                                return ranges::any_of(kCyclomaticNodes, [&line](auto &&node) {
-                                    return ranges::contains_subrange(line, node);
-                                });
-                            }));
+    return static_cast<int>(ranges::distance(views::split(f.ast, delim) | views::filter([](auto &&line) {
+                                                 return ranges::any_of(kCyclomaticNodes, [&line](auto &&node) {
+                                                     return ranges::contains_subrange(line, node);
+                                                 });
+                                             })));
 }
 
 std::string CyclomaticComplexityMetric::Name() const { return "cyclomatic_complexity"; }

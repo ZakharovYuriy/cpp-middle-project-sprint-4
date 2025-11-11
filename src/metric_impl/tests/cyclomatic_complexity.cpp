@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
+#include <variant>
 
 #include "file.hpp"
 #include "function.hpp"
@@ -39,7 +40,7 @@ TEST(CyclomaticComplexityMetric, HandlesRichControlFlow) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 11);
+    EXPECT_EQ(std::get<int>(result.value), 11);
 }
 
 }  // namespace analyzer::metric::metric_impl

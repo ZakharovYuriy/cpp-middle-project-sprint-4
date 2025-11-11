@@ -18,22 +18,21 @@
 #include <variant>
 #include <vector>
 
+using namespace std;
+
 namespace analyzer::metric_accumulator {
 
 void MetricsAccumulator::AccumulateNextFunctionResults(const std::vector<metric::MetricResult> &metric_results) const {
-    for (const auto &result : metric_results) {
-        auto it = accumulators.find(result.metric_name);
-        if (it == accumulators.end())
-            continue;
-        it->second->Accumulate(result);
-    }
+    auto results =
+        metric_results | views::filter([&](const auto &result) { return accumulators.contains(result.metric_name); });
+    ranges::for_each(results, [&](const auto &result) { accumulators.at(result.metric_name)->Accumulate(result); });
 }
 
 void MetricsAccumulator::ResetAccumulators() {
-    for (auto &[name, accumulator] : accumulators) {
-        if (accumulator)
-            accumulator->Reset();
-    }
+    ranges::for_each(accumulators, [](auto &pair) {
+        if (pair.second)
+            pair.second->Reset();
+    });
 }
 
 }  // namespace analyzer::metric_accumulator

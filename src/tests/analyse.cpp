@@ -8,6 +8,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <string_view>
+#include <variant>
 
 #include "file.hpp"
 #include "function.hpp"
@@ -39,7 +40,7 @@ struct SumAccumulator : analyzer::metric_accumulator::IAccumulator {
     int total = 0;
 
     void Accumulate(const analyzer::metric::MetricResult &metric_result) override {
-        total += metric_result.value;
+        total += std::get<int>(metric_result.value);
     }
 
     void Finalize() override { is_finalized = true; }
@@ -80,7 +81,8 @@ TEST(AnalyseFunctions, CollectsFunctionsAndMetrics) {
 
         EXPECT_EQ(metrics.size(), 1u);
         EXPECT_EQ(metrics.front().metric_name, "name_length");
-        EXPECT_EQ(metrics.front().value, static_cast<int>(function.name.size()));
+        ASSERT_TRUE(std::holds_alternative<int>(metrics.front().value));
+        EXPECT_EQ(std::get<int>(metrics.front().value), static_cast<int>(function.name.size()));
         EXPECT_FALSE(function.name.empty());
     }
 }

@@ -109,7 +109,7 @@ MetricResult::ValueType CodeLinesCountMetric::CalculateImpl(const function::Func
                              return !isEmptyLine && !isComment;
                          }));
 
-    return numberOfLines;
+    return static_cast<int>(numberOfLines);
 }
 
 std::string CodeLinesCountMetric::Name() const { return "code_lines_count"; }

@@ -17,6 +17,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -30,6 +31,18 @@
 #include "metric_impl/metrics.hpp"
 
 namespace {
+
+std::string FormatMetricValue(const analyzer::metric::MetricResult &metric) {
+    return std::visit(
+        [](const auto &value) -> std::string {
+            using ValueType = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<ValueType, std::string>)
+                return value;
+            else
+                return std::to_string(value);
+        },
+        metric.value);
+}
 
 void RunDebugSnippet() {
     try {
@@ -58,7 +71,7 @@ void PrintFunctionMetrics(const analyzer::FunctionAnalysisEntry &entry, const st
     std::cout << func.name << '\n';
 
     for (const auto &metric : entry.second)
-        std::cout << indent << "  " << metric.metric_name << ": " << metric.value << '\n';
+        std::cout << indent << "  " << metric.metric_name << ": " << FormatMetricValue(metric) << '\n';
 }
 
 void PrintAnalysisSummary(const analyzer::FunctionAnalysis &analysis) {

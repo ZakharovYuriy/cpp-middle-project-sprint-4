@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
+#include <variant>
 
 #include "file.hpp"
 #include "function.hpp"
@@ -40,7 +41,7 @@ TEST(CountParametersMetric, CountsDifferentKinds) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 8);
+    EXPECT_EQ(std::get<int>(result.value), 8);
 }
 
 }  // namespace analyzer::metric::metric_impl

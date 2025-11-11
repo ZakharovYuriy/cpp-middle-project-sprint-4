@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
+#include <variant>
 
 #include "file.hpp"
 #include "function.hpp"
@@ -44,7 +45,7 @@ TEST(CodeLinesCountMetric, CountsClassMethodWithoutDocstring) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 3);
+    EXPECT_EQ(std::get<int>(result.value), 3);
 }
 
 TEST(CodeLinesCountMetric, CountsDocstringsButSkipsComments) {
@@ -53,7 +54,7 @@ TEST(CodeLinesCountMetric, CountsDocstringsButSkipsComments) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 6);
+    EXPECT_EQ(std::get<int>(result.value), 6);
 }
 
 TEST(CodeLinesCountMetric, IgnoresBlankLinesInSparseFunction) {
@@ -62,7 +63,7 @@ TEST(CodeLinesCountMetric, IgnoresBlankLinesInSparseFunction) {
 
     const auto result = metric.Calculate(function);
 
-    EXPECT_EQ(result.value, 18);
+    EXPECT_EQ(std::get<int>(result.value), 18);
 }
 
 }  // namespace analyzer::metric::metric_impl
